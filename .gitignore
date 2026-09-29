@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+viaturas.db
+viaturas.db.bak
+.env
+dados_sensiveis.json
