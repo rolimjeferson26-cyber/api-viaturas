@@ -291,26 +291,26 @@ COFRES = [
 def inserir_veiculo(cursor, veiculo):
     """Insere a ficha técnica e devolve o id gerado para o veículo."""
     colunas = ", ".join(veiculo.keys())            # "quartel, codigo, ..."
-    marcadores = ", ".join("?" for _ in veiculo)   # "?, ?, ..."
+    marcadores = ", ".join("%s" for _ in veiculo)  # "%s, %s, ..."
+    # RETURNING id = o INSERT devolve o id que o SERIAL acabou de gerar
     cursor.execute(
-        f"INSERT INTO veiculos ({colunas}) VALUES ({marcadores})",
+        f"INSERT INTO veiculos ({colunas}) VALUES ({marcadores}) RETURNING id",
         tuple(veiculo.values()),
     )
-    # lastrowid = o id que o AUTOINCREMENT acabou de gerar
-    return cursor.lastrowid
+    return cursor.fetchone()["id"]
 
 
 def inserir_cofre_com_materiais(cursor, veiculo_id, nome_cofre, materiais):
     """Cria um cofre ligado ao veículo e insere todos os materiais dele."""
     cursor.execute(
-        "INSERT INTO cofres (veiculo_id, nome) VALUES (?, ?)",
+        "INSERT INTO cofres (veiculo_id, nome) VALUES (%s, %s) RETURNING id",
         (veiculo_id, nome_cofre),
     )
-    cofre_id = cursor.lastrowid
+    cofre_id = cursor.fetchone()["id"]
 
     # executemany = mesmo INSERT repetido para cada item da lista
     cursor.executemany(
-        "INSERT INTO materiais (cofre_id, quantidade, descricao) VALUES (?, ?, ?)",
+        "INSERT INTO materiais (cofre_id, quantidade, descricao) VALUES (%s, %s, %s)",
         [(cofre_id, qtd, descricao) for qtd, descricao in materiais],
     )
     return cofre_id
@@ -339,12 +339,12 @@ def main():
 
     criar_tabelas()  # garante que as tabelas existem
 
-    conexao = criar_conexao()  # já vem com PRAGMA foreign_keys = ON
+    conexao = criar_conexao()
     cursor = conexao.cursor()
 
     # Evita duplicar a viatura se o script for rodado duas vezes
     cursor.execute(
-        "SELECT id FROM veiculos WHERE matricula = ?", (veiculo["matricula"],)
+        "SELECT id FROM veiculos WHERE matricula = %s", (veiculo["matricula"],)
     )
     if cursor.fetchone():
         print(f"Viatura {veiculo['identificacao']} já existe no banco. Nada foi inserido.")

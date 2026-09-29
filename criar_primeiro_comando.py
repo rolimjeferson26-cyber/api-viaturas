@@ -14,10 +14,10 @@ Ele pergunta nome, email e senha no terminal. A senha não aparece
 enquanto você digita (é normal, igual ao sudo do Linux).
 """
 
-import sqlite3
 from getpass import getpass
 
 import bcrypt
+import psycopg2.errors
 
 from database import criar_conexao, criar_tabelas
 
@@ -44,19 +44,22 @@ def main():
 
     conexao = criar_conexao()
     try:
-        cursor = conexao.execute(
-            "INSERT INTO comando (nome, email, senha_hash) VALUES (?, ?, ?)",
+        cursor = conexao.cursor()
+        cursor.execute(
+            "INSERT INTO comando (nome, email, senha_hash) "
+            "VALUES (%s, %s, %s) RETURNING id",
             (nome, email, senha_hash.decode("utf-8")),
         )
+        novo_id = cursor.fetchone()["id"]
         conexao.commit()
-    except sqlite3.IntegrityError:
+    except psycopg2.errors.UniqueViolation:
         print(f"Erro: o email {email} já está cadastrado.")
         return
     finally:
         # "finally" roda sempre, com erro ou sem: a conexão nunca fica aberta
         conexao.close()
 
-    print(f"Usuário do Comando criado: {nome} <{email}> (id={cursor.lastrowid})")
+    print(f"Usuário do Comando criado: {nome} <{email}> (id={novo_id})")
     print("Agora já dá pra fazer POST /login com esse email e senha.")
 
 

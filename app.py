@@ -29,12 +29,12 @@ Alteração (PROTEGIDAS: exigem token do Comando):
 """
 
 import os
-import sqlite3
 import datetime
 from functools import wraps
 
 import bcrypt
 import jwt
+import psycopg2.errors
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 
@@ -242,17 +242,18 @@ def cadastro_comando():
 
     try:
         cursor.execute(
-            "INSERT INTO comando (nome, email, senha_hash) VALUES (?, ?, ?)",
+            # RETURNING id: o INSERT já devolve o id que o banco gerou
+            "INSERT INTO comando (nome, email, senha_hash) "
+            "VALUES (%s, %s, %s) RETURNING id",
             (nome, email, senha_hash.decode("utf-8")),
         )
+        novo_id = cursor.fetchone()["id"]
         conexao.commit()
-    except sqlite3.IntegrityError:
-        # IntegrityError = o banco recusou por quebrar uma regra
-        # (aqui, o UNIQUE do email)
+    except psycopg2.errors.UniqueViolation:
+        # UniqueViolation = o banco recusou por quebrar o UNIQUE do email
         conexao.close()
         return jsonify({"erro": "email já cadastrado"}), 409
 
-    novo_id = cursor.lastrowid
     conexao.close()
 
     return jsonify({"id": novo_id, "nome": nome, "email": email}), 201
@@ -270,7 +271,7 @@ def login():
     conexao = criar_conexao()
     cursor = conexao.cursor()
     cursor.execute(
-        "SELECT id, nome, senha_hash FROM comando WHERE email = ?", (email,)
+        "SELECT id, nome, senha_hash FROM comando WHERE email = %s", (email,)
     )
     usuario = cursor.fetchone()
     conexao.close()
@@ -280,18 +281,16 @@ def login():
     if usuario is None:
         return jsonify({"erro": "email ou senha inválidos"}), 401
 
-    usuario_id, nome, senha_hash = usuario
-
     senha_confere = bcrypt.checkpw(
-        senha.encode("utf-8"), senha_hash.encode("utf-8")
+        senha.encode("utf-8"), usuario["senha_hash"].encode("utf-8")
     )
 
     if not senha_confere:
         return jsonify({"erro": "email ou senha inválidos"}), 401
 
     payload = {
-        "usuario_id": usuario_id,
-        "nome": nome,
+        "usuario_id": usuario["id"],
+        "nome": usuario["nome"],
         # datetime.now(timezone.utc) é o jeito atual de pegar a hora
         # UTC (o utcnow() do projeto anterior está obsoleto no Python 3.12)
         "exp": datetime.datetime.now(datetime.timezone.utc)
@@ -301,7 +300,7 @@ def login():
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
     # O nome vai junto para o frontend poder mostrar "Logado como ..."
-    return jsonify({"token": token, "nome": nome}), 200
+    return jsonify({"token": token, "nome": usuario["nome"]}), 200
 
 
 # =====================================================================
@@ -324,30 +323,29 @@ def listar_veiculos():
     # .get("tipo") devolve None se o parâmetro não foi enviado.
     tipo = request.args.get("tipo")
 
+    # As linhas já vêm como dicionário (RealDictCursor, ver database.py):
+    # dá pra fazer linha["marca"] em vez de linha[4].
     conexao = criar_conexao()
-
-    # row_factory = sqlite3.Row faz cada linha do resultado se
-    # comportar como um dicionário: dá pra fazer linha["marca"] em
-    # vez de linha[4]. Assim fica fácil transformar em JSON.
-    conexao.row_factory = sqlite3.Row
+    cursor = conexao.cursor()
 
     if tipo:
         # .strip().upper(): aceita "vsat" ou " VSAT " e procura "VSAT",
         # que é como os tipos estão gravados no banco.
-        # O "?" continua protegendo contra SQL injection: nunca colamos
+        # O "%s" continua protegendo contra SQL injection: nunca colamos
         # o texto da URL direto dentro do SQL.
-        linhas = conexao.execute("""
+        cursor.execute("""
             SELECT id, quartel, codigo, identificacao, tipo, marca, modelo, matricula
             FROM veiculos
-            WHERE tipo = ?
+            WHERE tipo = %s
             ORDER BY identificacao
-        """, (tipo.strip().upper(),)).fetchall()
+        """, (tipo.strip().upper(),))
     else:
-        linhas = conexao.execute("""
+        cursor.execute("""
             SELECT id, quartel, codigo, identificacao, tipo, marca, modelo, matricula
             FROM veiculos
             ORDER BY identificacao
-        """).fetchall()
+        """)
+    linhas = cursor.fetchall()
     conexao.close()
 
     # Converte cada linha em dicionário -> jsonify transforma em JSON.
@@ -373,12 +371,11 @@ def detalhe_veiculo(veiculo_id):
     (/veiculos/abc dá 404 automaticamente).
     """
     conexao = criar_conexao()
-    conexao.row_factory = sqlite3.Row
+    cursor = conexao.cursor()
 
     # 1) Ficha técnica
-    veiculo = conexao.execute(
-        "SELECT * FROM veiculos WHERE id = ?", (veiculo_id,)
-    ).fetchone()
+    cursor.execute("SELECT * FROM veiculos WHERE id = %s", (veiculo_id,))
+    veiculo = cursor.fetchone()
 
     if veiculo is None:
         conexao.close()
@@ -387,7 +384,7 @@ def detalhe_veiculo(veiculo_id):
     # 2) Cofres + materiais numa só consulta (o JOIN).
     # LEFT JOIN em vez de JOIN: se um cofre estiver vazio (sem
     # materiais), ele continua a aparecer no resultado.
-    linhas = conexao.execute("""
+    cursor.execute("""
         SELECT cofres.id   AS cofre_id,
                cofres.nome AS cofre_nome,
                materiais.id AS material_id,
@@ -395,9 +392,10 @@ def detalhe_veiculo(veiculo_id):
                materiais.descricao
         FROM cofres
         LEFT JOIN materiais ON materiais.cofre_id = cofres.id
-        WHERE cofres.veiculo_id = ?
+        WHERE cofres.veiculo_id = %s
         ORDER BY cofres.id, materiais.id
-    """, (veiculo_id,)).fetchall()
+    """, (veiculo_id,))
+    linhas = cursor.fetchall()
     conexao.close()
 
     # 3) O JOIN devolve uma tabela "achatada" (1 linha por material,
@@ -444,21 +442,21 @@ def criar_veiculo():
     # Fica só com as chaves que são colunas conhecidas. Qualquer outra
     # coisa que vier no JSON (ex: "id", "hacker": ...) é ignorada.
     # Isso é importante porque os NOMES das colunas vão entrar no SQL
-    # por f-string (o "?" só protege VALORES, não nomes de colunas).
+    # por f-string (o "%s" só protege VALORES, não nomes de colunas).
     veiculo = {col: dados[col] for col in COLUNAS_VEICULO if col in dados}
     veiculo["tipo"] = veiculo["tipo"].strip().upper()  # igual ao filtro
 
     colunas = ", ".join(veiculo.keys())
-    marcadores = ", ".join("?" for _ in veiculo)
+    marcadores = ", ".join("%s" for _ in veiculo)
 
     conexao = criar_conexao()
     cursor = conexao.cursor()
     cursor.execute(
-        f"INSERT INTO veiculos ({colunas}) VALUES ({marcadores})",
+        f"INSERT INTO veiculos ({colunas}) VALUES ({marcadores}) RETURNING id",
         tuple(veiculo.values()),
     )
+    novo_id = cursor.fetchone()["id"]
     conexao.commit()
-    novo_id = cursor.lastrowid
     conexao.close()
 
     veiculo["id"] = novo_id
@@ -487,14 +485,13 @@ def editar_veiculo(veiculo_id):
             return jsonify({"erro": "tipo não pode ficar vazio"}), 400
         alteracoes["tipo"] = alteracoes["tipo"].strip().upper()
 
-    # Monta "marca = ?, modelo = ?" só com os campos enviados
-    trechos_set = ", ".join(f"{col} = ?" for col in alteracoes)
+    # Monta "marca = %s, modelo = %s" só com os campos enviados
+    trechos_set = ", ".join(f"{col} = %s" for col in alteracoes)
 
     conexao = criar_conexao()
-    conexao.row_factory = sqlite3.Row
     cursor = conexao.cursor()
     cursor.execute(
-        f"UPDATE veiculos SET {trechos_set} WHERE id = ?",
+        f"UPDATE veiculos SET {trechos_set} WHERE id = %s",
         (*alteracoes.values(), veiculo_id),
     )
 
@@ -504,9 +501,8 @@ def editar_veiculo(veiculo_id):
         return jsonify({"erro": "viatura não encontrada"}), 404
 
     conexao.commit()
-    atualizado = cursor.execute(
-        "SELECT * FROM veiculos WHERE id = ?", (veiculo_id,)
-    ).fetchone()
+    cursor.execute("SELECT * FROM veiculos WHERE id = %s", (veiculo_id,))
+    atualizado = cursor.fetchone()
     conexao.close()
 
     return jsonify(dict(atualizado)), 200
@@ -532,17 +528,17 @@ def criar_cofre(veiculo_id):
     cursor = conexao.cursor()
 
     # Confere se a viatura existe antes de pendurar um cofre nela
-    cursor.execute("SELECT id FROM veiculos WHERE id = ?", (veiculo_id,))
+    cursor.execute("SELECT id FROM veiculos WHERE id = %s", (veiculo_id,))
     if cursor.fetchone() is None:
         conexao.close()
         return jsonify({"erro": "viatura não encontrada"}), 404
 
     cursor.execute(
-        "INSERT INTO cofres (veiculo_id, nome) VALUES (?, ?)",
+        "INSERT INTO cofres (veiculo_id, nome) VALUES (%s, %s) RETURNING id",
         (veiculo_id, nome),
     )
+    novo_id = cursor.fetchone()["id"]
     conexao.commit()
-    novo_id = cursor.lastrowid
     conexao.close()
 
     return jsonify({"id": novo_id, "veiculo_id": veiculo_id, "nome": nome}), 201
@@ -568,17 +564,18 @@ def criar_material(cofre_id):
     conexao = criar_conexao()
     cursor = conexao.cursor()
 
-    cursor.execute("SELECT id FROM cofres WHERE id = ?", (cofre_id,))
+    cursor.execute("SELECT id FROM cofres WHERE id = %s", (cofre_id,))
     if cursor.fetchone() is None:
         conexao.close()
         return jsonify({"erro": "cofre não encontrado"}), 404
 
     cursor.execute(
-        "INSERT INTO materiais (cofre_id, quantidade, descricao) VALUES (?, ?, ?)",
+        "INSERT INTO materiais (cofre_id, quantidade, descricao) "
+        "VALUES (%s, %s, %s) RETURNING id",
         (cofre_id, quantidade, descricao),
     )
+    novo_id = cursor.fetchone()["id"]
     conexao.commit()
-    novo_id = cursor.lastrowid
     conexao.close()
 
     return jsonify({
@@ -610,13 +607,12 @@ def editar_material(material_id):
     if "descricao" in alteracoes and not alteracoes["descricao"]:
         return jsonify({"erro": "descricao não pode ficar vazia"}), 400
 
-    trechos_set = ", ".join(f"{col} = ?" for col in alteracoes)
+    trechos_set = ", ".join(f"{col} = %s" for col in alteracoes)
 
     conexao = criar_conexao()
-    conexao.row_factory = sqlite3.Row
     cursor = conexao.cursor()
     cursor.execute(
-        f"UPDATE materiais SET {trechos_set} WHERE id = ?",
+        f"UPDATE materiais SET {trechos_set} WHERE id = %s",
         (*alteracoes.values(), material_id),
     )
 
@@ -625,9 +621,8 @@ def editar_material(material_id):
         return jsonify({"erro": "material não encontrado"}), 404
 
     conexao.commit()
-    atualizado = cursor.execute(
-        "SELECT * FROM materiais WHERE id = ?", (material_id,)
-    ).fetchone()
+    cursor.execute("SELECT * FROM materiais WHERE id = %s", (material_id,))
+    atualizado = cursor.fetchone()
     conexao.close()
 
     return jsonify(dict(atualizado)), 200
@@ -639,7 +634,7 @@ def remover_material(material_id):
     """Remove um material de vez. Exige token do Comando."""
     conexao = criar_conexao()
     cursor = conexao.cursor()
-    cursor.execute("DELETE FROM materiais WHERE id = ?", (material_id,))
+    cursor.execute("DELETE FROM materiais WHERE id = %s", (material_id,))
 
     # Mesmo truque do PUT: 0 linhas apagadas = esse id não existe
     if cursor.rowcount == 0:
