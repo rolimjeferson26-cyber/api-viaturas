@@ -3,6 +3,9 @@ app.py
 
 Rotas da API:
 
+Frontend:
+- GET  /                   -> a página (static/index.html + style.css + app.js)
+
 Consulta (abertas, sem login - modo consulta para os bombeiros):
 - GET  /veiculos           -> lista todas as viaturas
 - GET  /veiculos?tipo=VSAT -> lista só as viaturas daquele tipo
@@ -11,7 +14,7 @@ Consulta (abertas, sem login - modo consulta para os bombeiros):
   Comando, vem tudo.
 
 Autenticação do Comando:
-- POST /login              -> email + senha -> devolve token JWT
+- POST /login              -> email + senha -> devolve token JWT e nome
 - POST /comando/cadastro   -> PROTEGIDA: um usuário do Comando cadastra
                               outro. O PRIMEIRO usuário é criado com o
                               script criar_primeiro_comando.py
@@ -37,14 +40,20 @@ from flask import Flask, jsonify, request
 
 from database import criar_conexao, criar_tabelas
 
-# Lê o arquivo .env e coloca a SECRET_KEY nas variáveis de ambiente
+# Lê o arquivo .env (se existir) e coloca o que está nele nas
+# variáveis de ambiente. Se o .env não existir (ex: no Render), não dá
+# erro: as variáveis vêm do painel do servidor. E se uma variável já
+# existir no ambiente, o .env NÃO a substitui.
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # Sem SECRET_KEY não dá pra assinar nem conferir tokens. Melhor a API
 # nem arrancar do que dar um erro confuso só na hora do login.
 if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY não encontrada. Confira o arquivo .env")
+    raise RuntimeError(
+        "SECRET_KEY não encontrada. No seu PC: confira o arquivo .env. "
+        "No servidor: cadastre a variável SECRET_KEY no painel."
+    )
 
 app = Flask(__name__)
 
@@ -188,6 +197,21 @@ def esconder_campos_sensiveis(veiculo):
 
 
 # =====================================================================
+# FRONTEND
+# =====================================================================
+@app.route("/")
+def pagina_inicial():
+    """
+    Entrega a página do frontend (static/index.html).
+
+    O Flask já serve sozinho tudo o que está na pasta "static" no
+    endereço /static/... (é daí que o index.html puxa o style.css e o
+    app.js). Esta rota só faz o endereço principal (/) abrir a página.
+    """
+    return app.send_static_file("index.html")
+
+
+# =====================================================================
 # AUTENTICAÇÃO DO COMANDO
 # =====================================================================
 @app.route("/comando/cadastro", methods=["POST"])
@@ -276,7 +300,8 @@ def login():
 
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
-    return jsonify({"token": token}), 200
+    # O nome vai junto para o frontend poder mostrar "Logado como ..."
+    return jsonify({"token": token, "nome": nome}), 200
 
 
 # =====================================================================
@@ -628,8 +653,14 @@ def remover_material(material_id):
 
 
 if __name__ == "__main__":
-    # ATENÇÃO: debug=True é só para desenvolvimento no seu PC.
-    # Com ele ligado, uma página de erro permite executar código
-    # Python no servidor. DESLIGUE (debug=False) antes de expor a
-    # API na rede do quartel ou na internet.
-    app.run(debug=True, port=5000)
+    # Este bloco só roda com "python app.py" (desenvolvimento).
+    # Em produção quem arranca a API é o Gunicorn (ver Procfile), e
+    # ele importa o "app" direto, sem passar por aqui.
+    #
+    # O debug só liga se a variável FLASK_DEBUG for "1" (o seu .env
+    # local tem FLASK_DEBUG=1). Sem ela, fica DESLIGADO: assim, se
+    # alguém esquecer de configurar, o servidor nasce seguro.
+    # (Com debug ligado, a página de erro permite executar código
+    # Python no servidor - nunca pode estar ligado na internet.)
+    debug = os.getenv("FLASK_DEBUG") == "1"
+    app.run(debug=debug, port=5000)

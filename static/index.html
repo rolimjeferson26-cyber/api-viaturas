@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <!-- Faz a página se ajustar à largura do telemóvel -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Viaturas</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <!-- ============================================================
+         TOPO: título + área de login (preenchida pelo app.js)
+         ============================================================ -->
+    <header class="topo">
+        <h1>Viaturas</h1>
+        <!-- O app.js coloca aqui o botão "Login Comando"
+             ou o "Logado como ... - Sair" -->
+        <div id="area-login"></div>
+    </header>
+
+    <main>
+        <!-- ========================================================
+             FILTRO POR TIPO
+             ======================================================== -->
+        <form id="form-filtro" class="filtro">
+            <input type="text" id="campo-tipo" placeholder="Filtrar por tipo (ex: VSAT)">
+            <button type="submit">Filtrar</button>
+            <button type="button" id="botao-limpar" class="secundario">Limpar</button>
+        </form>
+
+        <!-- Mensagens de erro/aviso aparecem aqui -->
+        <div id="mensagem" class="mensagem escondido"></div>
+
+        <!-- ========================================================
+             LISTA DE VIATURAS (preenchida pelo app.js)
+             ======================================================== -->
+        <div id="lista-veiculos"></div>
+    </main>
+
+    <!-- ============================================================
+         MODAL DE LOGIN (janela por cima da página)
+         Começa escondido; o app.js tira a classe "escondido" para
+         mostrar.
+         ============================================================ -->
+    <div id="modal-login" class="modal-fundo escondido">
+        <form id="form-login" class="modal">
+            <h2>Login Comando</h2>
+
+            <label for="login-email">Email</label>
+            <input type="email" id="login-email" required>
+
+            <label for="login-senha">Senha</label>
+            <input type="password" id="login-senha" required>
+
+            <p id="login-erro" class="erro"></p>
+
+            <div class="botoes">
+                <button type="submit">Entrar</button>
+                <button type="button" id="botao-cancelar-login" class="secundario">Cancelar</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,354 @@
+/* ================================================================
+   CORES
+   Mudar uma cor aqui muda em toda a página.
+   ================================================================ */
+:root {
+    --fundo: #f4f5f7;
+    --cartao: #ffffff;
+    --borda: #d9dce1;
+    --texto: #1f2328;
+    --texto-fraco: #656d76;
+    --destaque: #b3261e;      /* vermelho bombeiro, usado com moderação */
+    --botao: #2f3b4c;
+    --botao-texto: #ffffff;
+    --perigo: #b3261e;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--fundo);
+    color: var(--texto);
+    font-size: 16px;
+}
+
+main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+/* Qualquer elemento com class="escondido" some da página */
+.escondido {
+    display: none !important;
+}
+
+/* ================================================================
+   TOPO
+   ================================================================ */
+.topo {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--cartao);
+    border-bottom: 3px solid var(--destaque);
+}
+
+.topo h1 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.usuario-logado {
+    color: var(--texto-fraco);
+    margin-right: 8px;
+}
+
+/* ================================================================
+   BOTÕES E CAMPOS
+   ================================================================ */
+button {
+    background: var(--botao);
+    color: var(--botao-texto);
+    border: 1px solid var(--botao);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+button:hover {
+    opacity: 0.85;
+}
+
+button.secundario {
+    background: transparent;
+    color: var(--botao);
+}
+
+button.perigo {
+    background: transparent;
+    color: var(--perigo);
+    border-color: var(--perigo);
+}
+
+button.pequeno {
+    padding: 2px 8px;
+    font-size: 0.85rem;
+}
+
+input {
+    padding: 6px 8px;
+    border: 1px solid var(--borda);
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
+/* ================================================================
+   FILTRO
+   ================================================================ */
+.filtro {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.filtro input {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ================================================================
+   MENSAGENS
+   ================================================================ */
+/* Aviso que aparece fixo no rodapé da tela (visível mesmo com a
+   página rolada para baixo) e some sozinho */
+.mensagem {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100% - 32px);
+    padding: 10px 16px;
+    border-radius: 6px;
+    background: var(--botao);
+    color: var(--botao-texto);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.erro {
+    color: var(--perigo);
+    min-height: 1.2em;
+    margin: 8px 0;
+}
+
+.vazio {
+    color: var(--texto-fraco);
+    font-style: italic;
+}
+
+/* ================================================================
+   CARDS DAS VIATURAS
+   ================================================================ */
+.card {
+    background: var(--cartao);
+    border: 1px solid var(--borda);
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.card-cabecalho {
+    padding: 12px 16px;
+    cursor: pointer;
+}
+
+.card-cabecalho:hover {
+    background: #fafbfc;
+}
+
+.card-titulo {
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+.card-tipo {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: var(--fundo);
+    border: 1px solid var(--borda);
+    font-size: 0.8rem;
+    font-weight: normal;
+}
+
+.card-subtitulo {
+    color: var(--texto-fraco);
+    margin-top: 2px;
+}
+
+.card-detalhe {
+    border-top: 1px solid var(--borda);
+    padding: 16px;
+}
+
+/* ================================================================
+   FICHA TÉCNICA
+   ================================================================ */
+.secao-titulo {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0 0 8px;
+}
+
+.secao-titulo h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+/* Grade de 2 colunas: nome do campo | valor */
+.ficha {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 16px;
+    margin: 0 0 20px;
+}
+
+.ficha dt {
+    color: var(--texto-fraco);
+}
+
+.ficha dd {
+    margin: 0;
+}
+
+/* Formulário de edição da ficha: mesma grade, com campos */
+.ficha-edicao {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 16px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.ficha-edicao label {
+    color: var(--texto-fraco);
+}
+
+/* Em ecrãs estreitos, nome em cima e valor embaixo */
+@media (max-width: 500px) {
+    .ficha,
+    .ficha-edicao {
+        grid-template-columns: 1fr;
+    }
+    .ficha dd {
+        margin-bottom: 6px;
+    }
+}
+
+/* ================================================================
+   COFRES (accordion) E MATERIAIS
+   ================================================================ */
+.cofre {
+    border: 1px solid var(--borda);
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.cofre-cabecalho {
+    width: 100%;
+    text-align: left;
+    background: var(--fundo);
+    color: var(--texto);
+    border: none;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+}
+
+.cofre-conteudo {
+    padding: 8px 12px;
+}
+
+.materiais {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.material {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--fundo);
+}
+
+.material-qtd {
+    min-width: 2.5em;
+    font-weight: bold;
+    text-align: right;
+}
+
+.material-descricao {
+    flex: 1;
+}
+
+.material input[type="number"] {
+    width: 5em;
+}
+
+/* Formulários pequenos: novo material, novo cofre */
+.form-linha {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.form-linha input {
+    flex: 1;
+    min-width: 120px;
+}
+
+.form-linha input[type="number"] {
+    flex: 0 0 5em;
+    min-width: 0;
+}
+
+/* ================================================================
+   MODAL DE LOGIN
+   ================================================================ */
+.modal-fundo {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.modal {
+    background: var(--cartao);
+    border-radius: 8px;
+    padding: 20px;
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal h2 {
+    margin-top: 0;
+}
+
+.modal label {
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+
+.botoes {
+    display: flex;
+    gap: 8px;
+}
